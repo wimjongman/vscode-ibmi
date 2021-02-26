@@ -133,6 +133,18 @@ module.exports = class Instance {
             CompileTools.RunAction(this, node.resourceUri);
           })
         );
+        
+        context.subscriptions.push(
+          vscode.commands.registerCommand(`code-for-ibmi.runRPGDebug`, async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor) {
+              if (editor.document.isDirty)
+                vscode.window.showInformationMessage("Cannot launch debug while file is not saved.");
+              else
+                CompileTools.RunDebug(this, editor.document.getText());
+            }
+          })
+        );
 
         initialisedBefore = true;
       }

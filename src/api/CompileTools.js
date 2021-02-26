@@ -3,6 +3,8 @@ const vscode = require('vscode');
 const path = require('path');
 
 const errorHandler = require('./errorHandle');
+const IBMiContent = require('./IBMiContent');
+const { connect } = require('http2');
 
 const diagnosticSeverity = {
   0: vscode.DiagnosticSeverity.Information,
@@ -93,7 +95,8 @@ module.exports = class CompileTools {
 
   /**
    * @param {*} instance
-   * @param {vscode.Uri} uri 
+   * @param {vscode.Uri} uri
+   * @returns {Promise<boolean>} Whether compiled or not.
    */
   static async RunAction(instance, uri) {
     var evfeventInfo = {lib: '', object: ''};
@@ -184,7 +187,7 @@ module.exports = class CompileTools {
             output = await connection.qshCommand([
               'liblist -d ' + connection.defaultUserLibraries.join(' '),
               'liblist -a ' + libl.join(' '),
-              command,
+              command
             ], undefined, 1);
 
             if (output.code === 0 || output.code === null) {
@@ -211,12 +214,69 @@ module.exports = class CompileTools {
             this.refreshDiagnostics(instance, evfeventInfo);
           }
 
+          return compiled;
+
         }
       }
 
     } else {
       //No compile commands
       vscode.window.showErrorMessage(`No compile commands found for ${uri.scheme}-${extension}.`);
+    }
+
+    return false;
+  }
+
+  /**
+   * @param {*} instance
+   * @param {string} source Source content.
+   */
+  static async RunDebug(instance, source) {
+    const lines = source.split('\n');
+
+    if (lines[0].startsWith('**FREE')) {
+      let newLines = lines;
+      let line;
+
+      let debugLines = [];
+
+      for (let i = lines.length-1; i >= 0; i--) {
+        line = lines[i].trim().toUpperCase();
+
+        if (line.includes('=')) {
+          if (!line.startsWith('IF') && !line.startsWith('WHEN') && !line.startsWith('//')) {
+            debugLines.push(i);
+            newLines.splice(i, 0, `xlinex = ${i+1};`, `DUMP(A);`);
+          }
+        }
+
+        if (line.startsWith("DCL-S")) {
+          newLines.splice(i+1, 0, `DCL-S xlinex uns(5);`);
+          break;
+        }
+      }
+
+      debugLines = debugLines.reverse();
+
+      const connection = instance.getConnection();
+      /** @type {IBMiContent} */
+      const contentApi = instance.getContent();
+
+      const libl = connection.libraryList.slice(0).reverse();
+
+      await contentApi.writeStreamfile("/tmp/temp.rpgle", newLines.join('\n'));
+      await connection.paseCommand(`/QOpenSys/usr/bin/setccsid 1252 /tmp/temp.rpgle`)
+      const output = await connection.qshCommand([
+        'liblist -d ' + connection.defaultUserLibraries.join(' '),
+        'liblist -a ' + libl.join(' '),
+        `system -s "CRTBNDRPG PGM(ILEDITOR/DEBUGME) SRCSTMF('/tmp/temp.rpgle') OPTION(*EVENTF) TGTRLS(*CURRENT)"`,
+        `system "call ILEDITOR/DEBUGME"`
+      ], undefined, 1);
+
+      console.log(output.stdout.split('\n'));
+
+    } else {
+      vscode.window.showInformationMessage("Debug only supports total free format.");
     }
   }
 }
