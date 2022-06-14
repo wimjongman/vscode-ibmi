@@ -1,7 +1,6 @@
 
 const vscode = require(`vscode`);
 const instance = require(`../../../Instance`);
-
 const Tools = require(`../../../api/Tools`);
 
 module.exports = class basicQsysFs {

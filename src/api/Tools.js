@@ -175,6 +175,39 @@ module.exports = class {
     return result;
   }
 
+  static parseObjectPath(string) {
+    const result = {
+      library: undefined,
+      object: undefined,
+      type: undefined
+    };
+
+    const path = string.startsWith(`/`) ? string.substring(1).toUpperCase().split(`/`) : string.toUpperCase().split(`/`);
+      
+    if (path.length === 2) {
+      result.library = path[0];
+      result.object = path[1];
+    } else
+    if (path.length === 1) {
+      result.object = path[0];
+    } else {
+      throw new Error(`Invalid path: ${path}. Use format LIB/OBJ.type.`);
+    }
+    
+
+    if (result.object.includes(`.`)) {
+      result.type = result.object.substring(result.object.lastIndexOf(`.`) + 1);
+      result.object = result.object.substring(0, result.object.lastIndexOf(`.`));
+    }
+
+    if (result.library && result.library.length > 10)
+      throw new Error(`Invalid Library name: ${result.library}`);
+    if (result.object.length > 10)
+      throw new Error(`Invalid Object name: ${result.object}`);
+
+    return result;
+  }
+
   /**
    * @param {string} Path
    * @returns {string} escapedPath

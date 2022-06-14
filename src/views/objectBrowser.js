@@ -615,6 +615,12 @@ class ILEObject extends vscode.TreeItem {
       path: `/${library}/${name}.${type}`,
       fragment: attribute ? attribute : undefined
     });
+
+    this.command = {
+      command: `vscode.open`,
+      title: `Open`,
+      arguments: [this.resourceUri]
+    };
   }
 }
 
@@ -630,7 +636,8 @@ class Member extends vscode.TreeItem {
     this.resourceUri = vscode.Uri.from({
       scheme: `member`,
       path: `/${path}`
-    })
+    });
+
     this.command = {
       command: `code-for-ibmi.openEditable`,
       title: `Open Member`,

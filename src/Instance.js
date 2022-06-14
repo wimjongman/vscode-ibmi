@@ -123,6 +123,8 @@ module.exports = class Instance {
 
     const objectBrowser = require(`./views/objectBrowser`);
 
+    const ObjectFileSystem = new (require(`./filesystems/qsys/objectFs`));
+
     const actionsUI = require(`./webviews/actions`);
     const variablesUI = require(`./webviews/variables`);
 
@@ -273,6 +275,14 @@ module.exports = class Instance {
             `objectBrowser`,
             new objectBrowser(context)
           )
+        );
+
+        context.subscriptions.push(
+          //@ts-ignore
+          vscode.workspace.registerFileSystemProvider(`object`, ObjectFileSystem, {
+            isCaseSensitive: false,
+            isReadonly: true
+          })
         );
 
         //********* Search View */
