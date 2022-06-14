@@ -228,8 +228,8 @@ module.exports = class Instance {
         if (config.enableSourceDates) {
           if (connection.remoteFeatures[`QZDFMDB2.PGM`]) {
             basicMemberSupport = false;
-            require(`./filesystems/qsys/complex/handler`).begin(context);
-            qsysFs = new (require(`./filesystems/qsys/complex`));
+            require(`./filesystems/qsys/members/complex/handler`).begin(context);
+            qsysFs = new (require(`./filesystems/qsys/members/complex`));
 
             if (connection.qccsid === 65535) {
               vscode.window.showWarningMessage(`Source date support is enabled, but QCCSID is 65535. If you encounter problems with source date support, please disable it in the settings.`);
@@ -240,7 +240,7 @@ module.exports = class Instance {
         }
 
         if (basicMemberSupport) {
-          qsysFs = new (require(`./filesystems/qsys/basic`));
+          qsysFs = new (require(`./filesystems/qsys/members/basic`));
         }
 
         context.subscriptions.push(
