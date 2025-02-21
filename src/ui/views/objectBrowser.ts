@@ -910,29 +910,30 @@ Do you want to replace it?`, item.name), skipAllLabel, overwriteLabel, overwrite
           }
         }
 
-        //Download members
+        // Download members
         vscode.window.withProgress({ title: vscode.l10n.t(`Downloading {0} members`, toBeDownloaded.filter(m => m.copy).length), location: vscode.ProgressLocation.Notification }, async (task) => {
-          try {
-            await connection.withTempDirectory(async directory => {
-              task.report({ message: vscode.l10n.t(`copying to streamfiles`), increment: 33 })
-              const copyToStreamFiles = toBeDownloaded
-                .filter(item => item.copy)
-                .map(item =>
+          await connection.withTempDirectory(async directory => {
+            let good = 0;
+            let wrong = 0;
+            for (let item of toBeDownloaded) {
+              task.report({ message: vscode.l10n.t(`Fetching ${item.member.library}/${item.member.file}(${item.member.name})`), increment: 1 })
+              try {
+                const copyToStreamFiles =
                   [
                     `@QSYS/CPYF FROMFILE(${item.member.library}/${item.member.file}) TOFILE(QTEMP/QTEMPSRC) FROMMBR(${item.member.name}) TOMBR(TEMPMEMBER) MBROPT(*REPLACE) CRTFILE(*YES);`,
                     `@QSYS/CPYTOSTMF FROMMBR('${Tools.qualifyPath("QTEMP", "QTEMPSRC", "TEMPMEMBER", undefined)}') TOSTMF('${directory}/${item.name.toLocaleLowerCase()}') STMFOPT(*REPLACE) STMFCCSID(1208) DBFCCSID(${config.sourceFileCCSID});`
-                  ].join("\n"))
-                .join("\n");
-              await contentApi.runSQL(copyToStreamFiles);
-
-              task.report({ message: vscode.l10n.t(`getting streamfiles`), increment: 33 })
-              await connection.getContent().downloadDirectory(downloadLocation!, directory);
-              vscode.window.showInformationMessage(vscode.l10n.t(`Members download complete.`), vscode.l10n.t(`Open`))
-                .then(open => open ? vscode.commands.executeCommand('revealFileInOS', saveIntoDirectory ? vscode.Uri.joinPath(downloadLocationURI, toBeDownloaded[0].name.toLocaleLowerCase()) : downloadLocationURI) : undefined);
-            });
-          } catch (e: any) {
-            vscode.window.showErrorMessage(vscode.l10n.t(`Error downloading member(s)! {0}`, String(e)));
-          }
+                  ].join("\n");
+                await connection.runSQL(copyToStreamFiles);
+                good++;
+              } catch (e: any) {
+                wrong++;
+                vscode.window.showErrorMessage(vscode.l10n.t(`Error downloading ${item.member.name} from ${item.member.library}/${item.member.file}!`, String(e)));
+              }
+            }
+            await connection.getContent().downloadDirectory(downloadLocation!, directory);
+            vscode.window.showInformationMessage(vscode.l10n.t(`Members download complete\n. ${good} downloaded, ${wrong} not downloaded`), vscode.l10n.t(`Open`))
+              .then(open => open ? vscode.commands.executeCommand('revealFileInOS', saveIntoDirectory ? vscode.Uri.joinPath(downloadLocationURI, toBeDownloaded[0].name.toLocaleLowerCase()) : downloadLocationURI) : undefined);
+          });
         });
       }
     }),
