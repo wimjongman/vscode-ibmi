@@ -866,13 +866,13 @@ export function initializeObjectBrowser(context: vscode.ExtensionContext) {
 
       if (downloadLocationURI) {
         //Remove double entries and map to { path, copy } object
-        const toBeDownloaded = members
+        const downloadCandidates = members
           .filter((member, index, list) => list.findIndex(m => m.library === member.library && m.file === member.file && m.name === member.name) === index)
           .sort((m1, m2) => m1.name.localeCompare(m2.name))
           .map(member => ({ member, path: Tools.qualifyPath(member.library, member.file, member.name, member.asp), name: `${member.name}.${member.extension || "MBR"}`, copy: true }));
 
         if (!saveIntoDirectory) {
-          toBeDownloaded[0].name = basename(downloadLocationURI.path);
+          downloadCandidates[0].name = basename(downloadLocationURI.path);
         }
 
         const downloadLocation = saveIntoDirectory ? downloadLocationURI.path : dirname(downloadLocationURI.path);
@@ -885,7 +885,7 @@ export function initializeObjectBrowser(context: vscode.ExtensionContext) {
           const overwriteLabel = vscode.l10n.t(`Overwrite`);
           const overwriteAllLabel = vscode.l10n.t(`Overwrite all`);
           const skipAllLabel = vscode.l10n.t(`Skip all`);
-          for (const item of toBeDownloaded) {
+          for (const item of downloadCandidates) {
             const target = path.join(Tools.fixWindowsPath(downloadLocation), item.name);
             if (existsSync(target)) {
               if (skipAll) {
@@ -893,8 +893,7 @@ export function initializeObjectBrowser(context: vscode.ExtensionContext) {
               }
               else if (!overwriteAll) {
                 const answer = await vscode.window.showWarningMessage(vscode.l10n.t(`{0} already exists.
-Do you want to replace it?`, item.name), { modal: true }, vscode.l10n.t(`{0} already exists.
-Do you want to replace it?`, item.name), skipAllLabel, overwriteLabel, overwriteAllLabel);
+Do you want to replace it?`, item.name), { modal: true }, skipAllLabel, overwriteLabel, overwriteAllLabel);
                 if (answer) {
                   overwriteAll ||= (answer === overwriteAllLabel);
                   skipAll ||= (answer === skipAllLabel);
@@ -910,13 +909,22 @@ Do you want to replace it?`, item.name), skipAllLabel, overwriteLabel, overwrite
           }
         }
 
+        const toBeDownloaded = downloadCandidates.filter(m => m.copy);
+
         // Download members
-        vscode.window.withProgress({ title: vscode.l10n.t(`Downloading {0} members`, toBeDownloaded.filter(m => m.copy).length), location: vscode.ProgressLocation.Notification }, async (task) => {
+        vscode.window.withProgress({ cancellable: true, 
+          title: vscode.l10n.t(`Preparing {0} members`, toBeDownloaded.length), 
+          location: vscode.ProgressLocation.Notification }, async (task, cancelToken) => {
           await connection.withTempDirectory(async directory => {
             let good = 0;
             let wrong = 0;
+            const increment = 100 / (toBeDownloaded.length + 1)
+
             for (let item of toBeDownloaded) {
-              task.report({ message: vscode.l10n.t(`Fetching ${item.member.library}/${item.member.file}(${item.member.name})`), increment: 1 })
+              if (cancelToken.isCancellationRequested) {
+                break;
+              }
+              task.report({ message: vscode.l10n.t(`{0}/{1}({2}) ${good}/${toBeDownloaded.length}`, item.member.library, item.member.file, item.member.name), increment: 1 })
               try {
                 const copyToStreamFiles =
                   [
@@ -927,12 +935,28 @@ Do you want to replace it?`, item.name), skipAllLabel, overwriteLabel, overwrite
                 good++;
               } catch (e: any) {
                 wrong++;
-                vscode.window.showErrorMessage(vscode.l10n.t(`Error downloading ${item.member.name} from ${item.member.library}/${item.member.file}!`, String(e)));
+                vscode.window.showErrorMessage(vscode.l10n.t(`Error downloading {0} from {1}/{2}! ({3})`,
+                  item.member.name, item.member.library, item.member.file, String(e)));
               }
             }
-            await connection.getContent().downloadDirectory(downloadLocation!, directory);
-            vscode.window.showInformationMessage(vscode.l10n.t(`Members download complete\n. ${good} downloaded, ${wrong} not downloaded`), vscode.l10n.t(`Open`))
-              .then(open => open ? vscode.commands.executeCommand('revealFileInOS', saveIntoDirectory ? vscode.Uri.joinPath(downloadLocationURI, toBeDownloaded[0].name.toLocaleLowerCase()) : downloadLocationURI) : undefined);
+            if (cancelToken.isCancellationRequested) {
+              vscode.window.showInformationMessage(vscode.l10n.t("Download Cancelled"));
+              return;
+            }
+            task.report({ message: vscode.l10n.t(`Downloading...`), increment: increment })
+
+            try {
+              await connection.getContent().downloadDirectory(downloadLocation!, directory);
+              vscode.window.showInformationMessage(vscode.l10n.t(`Members download complete.
+                ${good} downloaded, ${wrong} not downloaded`), vscode.l10n.t(`Open`))
+                .then(open => open ?
+                  vscode.commands.executeCommand('revealFileInOS', saveIntoDirectory ?
+                    vscode.Uri.joinPath(downloadLocationURI, toBeDownloaded[0].name.toLocaleLowerCase())
+                    : downloadLocationURI)
+                  : undefined);
+            } catch (error) {
+              vscode.window.showInformationMessage(vscode.l10n.t("Error downloading member(s)! {0}", String(error)));
+            }
           });
         });
       }

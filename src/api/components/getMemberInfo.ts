@@ -72,7 +72,7 @@ export class GetMemberInfo implements IBMiComponent {
   }
 
   async getMemberInfo(connection: IBMi, library: string, sourceFile: string, member: string): Promise<IBMiMember | undefined> {
-    const config = connection.config!;
+    const config = connection.getConfig();
     const tempLib = config.tempLibrary;
     const statement = `select * from table(${tempLib}.${this.procedureName}('${library}', '${sourceFile}', '${member}'))`;
 
